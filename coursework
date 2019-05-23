@@ -1,0 +1,131 @@
+//   ALLOY ASSIGNMENT -  ANSWER SHEET 
+
+//  
+
+//  Hand in is by Tabula - check the CS262 webpage for the deadline.
+//
+
+//  Please provide your answers in the spaces below.
+
+//  You can use comments to provide further explanation on your answers if you wish. 
+//  Please don't change the names used in the answer stubs.
+//  And please DON'T comment out your actual Alloy solutions.   
+
+//  You SHOULD NOT convert the file to another format as I need to be able to run your answers in Alloy. 
+//  The number of lines left blank in each definition is NOT a guide to how much text you should insert.
+//  Add/remove blank lines as needed.
+
+// In the following signatures, enrolled represents students who are currently enrolled in the system, 
+// running represents the modules running in the current year, taking records which students are registered 
+// for which modules and marks represents the marks scored by students on different modules. 
+// No more than one mark will be recorded per module for each student. Students must be enrolled in order to register for modules, 
+// and they can only register for modules which are running. A student can only have a mark for modules on which they are registered.
+//
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Ordering utility with a parameter RegSys for questions 5,6.
+open util/ordering[RegSys] as R0 
+
+sig Student, Module, Mark {}
+sig RegSys
+  {
+  enrolled : set Student,
+  running : set Module,
+  taking : Student -> Module,
+  marks : Student -> (Module -> Mark)
+  }
+
+
+///// Question 1 - write signature constraints to capture the requirements stated above ///// 
+
+pred reginv [r:RegSys]                                          
+   {
+	(r.marks) in (Student -> (Module -> lone Mark)) //Sent1
+	all s: Student | all m: Module | ((r.taking).m in (r.enrolled)) && (s.(r.taking) in r.running) //Sent2
+	r.marks.Mark=(r.taking)//Sent3 
+   }
+
+
+///// Question 2 - write pred and run statements to show an instance of RegSys in which one or more
+// marks have been recorded for some modules, but other modules have no marks. ///// 
+
+pred showsome [r:RegSys]
+   {
+	reginv[r] && 
+	some m: Module , m': Module |  (#m.(Student.(r.marks)) = 0) &&  (#m'.(Student.(r.marks)) >0) 
+   }
+
+run showsome for 3 but 1 RegSys
+
+
+///// Question 3 - Write operations to:
+// • record a mark on a module for a student who has no existing mark (entermark);
+// • allow a student to deregister from a module (dereg);
+// • register a student for a module which will be arbitrarily chosen by the system (randomreg). ///// 
+
+pred entermark [r,r':RegSys, s:Student, m:Module, ma:Mark]
+  {
+	#m.(s.(r.marks)) = 0 &&
+	s in r.enrolled &&
+	r'.enrolled = r.enrolled &&
+	r'.running = r.running &&
+	r'.taking = r.taking &&
+	r'.marks=r.marks + s->(m->ma)
+  }
+
+pred dereg [r,r':RegSys, s:Student, m:Module]
+  {
+	s in r.enrolled &&
+	s->m in r.taking &&
+	r'.enrolled = r.enrolled &&
+	r'.running = r.running &&
+	r'.taking = r.taking - s->m &&
+	r'.marks = r.marks - s->(m->Mark)	
+  }
+
+pred randomreg [r,r':RegSys, s:Student]
+  {
+	s in r.enrolled &&
+	r'.enrolled = r.enrolled &&
+	one m: r.running | (s->m !in r.taking) &&  (r'.taking = r.taking + s->m)
+	r'.running = r.running 
+	r'.marks = r.marks
+  }
+
+
+///// Question 4 - Write functions to:
+// • output who is registered for module m (registeredfor);
+// • output all modules which have students registered but no marks yet recorded (nomarkmodules). ///// 
+
+fun registeredfor [r:RegSys, m:Module] : set Student { r.taking.m }
+
+fun nomarkmodules [r:RegSys] : set Module 
+  { 
+	{ m:Module | all s:Student | (s->m in r.taking) && (no m.(s.(r.marks))) }  
+  }
+
+
+ ///// Question 5 - Write all necessary Alloy commands to show arbitrary traces for the system, 
+ // allowing traces to start nondeterministically in any legitimate state. 
+ // Provide pred and run statements to display a trace in which some marks get entered (ie: they are not recorded initially). /////
+
+fact marktraces 
+  {
+	 reginv[R0/first[]] 
+		all r:RegSys - R0/last[] | let r' = R0/next[r] |
+			one s:Student, m:Module, ma:Mark | entermark[r, r', s, m, ma] or dereg [r, r', s, m] or randomreg [r, r', s]
+  }
+
+
+ ///// Question 6 - Write an Alloy assert statement (noMarkChange) and a check statement to see whether, 
+ // once any mark has been recorded for a student, it can be changed by any trace.  ///// 
+
+assert noMarkChange 
+  {
+	all r:RegSys - R0/last[] | 
+		let r' =  R0/next[r] | 
+			no s:Student, m:Module, ma: Mark , ma': Mark | 
+				(ma!=ma') && (s->(m->ma) in r.marks) && (s->(m->ma') in r'.marks) 
+  }
+
+check noMarkChange for 3
